@@ -69,20 +69,20 @@ module background
 	// for the VGA controller, in addition to any other functionality your design may require.
 
     // wires to connect datapath and controller
-    wire load_box1, load_box2, load_box3, load_person, enable;
+    wire load_ground, load_box1, load_box2, load_box3, load_person, enable;
     // Instansiate datapath
 	// datapath d0(...);
-    datapath d0(CLOCK_50,KEY[0], enable, load_box1, load_box2, load_box3, load_person, x, y, colour);
+    datapath d0(CLOCK_50,KEY[0], enable,load_ground, load_box1, load_box2, load_box3, load_person, x, y, colour);
     // Instansiate FSM control
     // control c0(...);
-    control c0(~KEY[3],KEY[0],CLOCK_50,enable,load_box1, load_box2, load_box3, load_person,writeEn); 
+    control c0(~KEY[3],KEY[0],CLOCK_50,enable,load_ground, load_box1, load_box2, load_box3, load_person,writeEn); 
 endmodule
 
-module control(go,reset_n, clock, enable, load_box1, load_box2, load_box3, load_person, plot);
+module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, load_box3, load_person, plot);
 	
       input go,reset_n,clock;
 		
-		output reg enable,load_box1,load_box2,load_box3, load_person,plot;
+		output reg enable,load_ground, load_box1,load_box2,load_box3, load_person,plot;
 		
 		reg [3:0] current_state, next_state;
 
@@ -103,16 +103,26 @@ module control(go,reset_n, clock, enable, load_box1, load_box2, load_box3, load_
                     S_LOAD_PERSON_WAIT   = 4'd10,
 						  S_READY4            = 4'd11 ,
 						  
-						  S_STARTING           = 4'd12;
-		
+						  S_STARTING           = 4'd12,
+                    S_LOAD_GROUND              = 4'd13,
+                    S_LOAD_GROUND_WAIT         = 4'd14,
+                    S_LOAD_READY0               = 4'd15;
 		
 		always@(*)
         begin: state_table 
             case (current_state)
                 
-                S_STARTING : next_state = go ? S_LOAD_BOX1 : S_STARTING; 
+                S_STARTING : next_state = go ? S_LOAD_GROUND : S_STARTING; 
+
+                //Draw Ground
+                S_LOAD_GROUND:next_state = S_GROUND_WAIT; 
+                S_LOAD_GROUND_WAIT: begin
+                                    line_counter = 8'b10010000; // width of screen
+                                    next_state = S_READY0;
+                S_READY0: next_state = (line_counter == 0) ? S_LOAD_BOX1; S_READY0;
+
                 //DRAW box1
-                S_LOAD_BOX1: next_state = go ? S_LOAD_BOX1_WAIT : S_LOAD_BOX1; 
+                S_LOAD_BOX1: next_state =  S_LOAD_BOX1; 
                 S_LOAD_BOX1_WAIT: next_state = S_READY1; 
                 S_READY1: next_state = S_LOAD_BOX2;
 
@@ -141,6 +151,7 @@ module control(go,reset_n, clock, enable, load_box1, load_box2, load_box3, load_
 	always@(*)
         begin: enable_signals
             // By default make all our signals 0
+	        load_ground = 1'b0;
             load_box1 = 1'b0;
             load_box2 = 1'b0;
             load_box3 = 1'b0;
@@ -149,6 +160,11 @@ module control(go,reset_n, clock, enable, load_box1, load_box2, load_box3, load_
             plot = 1'b0;
 		    
 	    case(current_state)
+
+	      	S_LOAD_GROUND_WAIT:begin
+	      		load_ground = 1'b1;
+	      		end
+
 	      	S_LOAD_BOX1_WAIT:begin
 	      		load_box1 = 1'b1;
 	      		end
@@ -161,6 +177,12 @@ module control(go,reset_n, clock, enable, load_box1, load_box2, load_box3, load_
 	      	S_LOAD_PERSON_WAIT:begin
 	      		load_person = 1'b1;
 	      		end
+
+		S_READY0:begin
+		        enable = 1'b1;
+	      		plot = 1'b1;
+		        end
+
 		S_READY1:begin
 		        enable = 1'b1;
 	      		plot = 1'b1;
@@ -192,6 +214,9 @@ module control(go,reset_n, clock, enable, load_box1, load_box2, load_box3, load_
 					 clock_counter<= 4'b1110;
 					 end
             else if(clock_counter == 4'b0000) begin
+                // change line counter so that eventually whole line is drawn
+                if(current_state == S_READY0) 
+                    line_counter = line_counter - 1'd1;
                 current_state <= next_state;
                 clock_counter <= 4'b1110;
                 end
@@ -215,7 +240,7 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
 
         reg            [6:0] box_1_x,box_1_y,box_2_x,box_2_y,box_3_x,box_3_y, person_x, person_y; 
      
-        localparam GROUND_TOP = 7'd30;
+        localparam GROUND_TOP = 7'd100;
          
 
         counter cnt0(
@@ -274,7 +299,12 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
                     regX <= {1'b0, person_x};
                     regY <= person_y;
                     //red colour person
-		    regC <= 3'b100;
+		            regC <= 3'b100;
+                end
+                if (load_person) begin
+                    regY <= GROUND_TOP;
+                    //green colour ground
+		            regC <= 3'b010;
                 end
             end
         end
@@ -285,6 +315,10 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
               y <= 7'd0;
               colour_out <= 3'd0;
           end
+          else if (load_ground) begin
+              x <= ground_counter;
+              y <= regY + c2;
+              colour_out <= regC;
           else begin
               //counter draws a 4 x 4 square
               x <= regX + c1;
