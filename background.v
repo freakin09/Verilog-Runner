@@ -117,7 +117,7 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
                 //Draw Ground
                 S_LOAD_GROUND:next_state = S_GROUND_WAIT; 
                 S_LOAD_GROUND_WAIT: begin
-                                    line_counter = 8'b10010000; // width of screen
+                                    line_counter = 8'b10100000; // width of screen
                                     next_state = S_READY0;
                 S_READY0: next_state = (line_counter == 0) ? S_LOAD_BOX1; S_READY0;
 
@@ -217,6 +217,7 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
                 // change line counter so that eventually whole line is drawn
                 if(current_state == S_READY0) 
                     line_counter = line_counter - 1'd1;
+                //will only draw ground once so no need to reset line_counter
                 current_state <= next_state;
                 clock_counter <= 4'b1110;
                 end
@@ -249,6 +250,12 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
           .enable(enable),
           .out(c0)
           );
+
+        wire erase;
+
+        datapath_move(clock, reset_n, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
+                      box_3_y, person_x, person_y, erase);
+        
 		  
         assign c1 = c0[1:0];
 	assign c2 = c0[3:2];
@@ -309,6 +316,10 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
             end
         end
 
+     wire [7:0] ground_count;
+
+     ground_counter(clock, reset_n, load_ground, ground_count);
+
      always @ (posedge clock) begin
           if (!reset_n) begin
               x <= 8'd0;
@@ -316,22 +327,55 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
               colour_out <= 3'd0;
           end
           else if (load_ground) begin
-              x <= ground_counter;
+              x <= ground_count;
               y <= regY + c2;
               colour_out <= regC;
           else begin
               //counter draws a 4 x 4 square
               x <= regX + c1;
               y <= regY + c2;
-              colour_out <= regC;
+              if(erase == 1'b1)
+                  //erase by setting colour to black
+                  colour_out <= 3'b000;
+              else 
+                  colour_out <= regC;
           end
      end
 
 endmodule
 	
-	
 
-module counter(clock, reset_n, enable, out);
+
+module datapath_move(clock, reset_n, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
+                     box_3_y, person_x, person_y, erase);
+        
+        input clock, reset_n, enable;
+        
+        output [6:0] box_1_x,box_1_y,box_2_x,box_2_y,box_3_x,box_3_y, person_x, person_y; 
+        output erase;
+        
+        wire enable_f, enable_x;
+        wire [19:0] do;
+        wire [3:0] fo;
+        
+        wire [7:0] a, b;
+        wire [7:0] q1, q2;
+        
+        delay_counter dc(clock,reset_n,enable,do);
+        assign enable_f = (do == 20'b0) ? 1 : 0;
+        frame_counter fc(clock,reset_n,enable_f,fo); 
+        assign enable_x = (fo == 4'b1111) ? 1 : 0;
+        
+        random_distance rd(clock,reset_n,enable, a, b);
+        x_counter xc1(enable_x, clock, reset_n, a, enable, q1);
+        x_counter xc2(enable_x, clock, reset_n, b, enable, q2);
+        
+        assign erase = (fo == 4'b1111) ? 1'b1: 1'b0;
+        
+        
+endmodule
+
+counter(clock, reset_n, enable, out);
 	input 		clock, reset_n, enable;
 	output reg [3:0] out;
 
@@ -352,4 +396,66 @@ module counter(clock, reset_n, enable, out);
 
 	
 endmodule
+
+module ground_counter(clock, reset_n, enable, out);
+	input 		clock, reset_n, enable;
+	output reg [7:0] out;
+
+	 
+	
+	always @(posedge clock) begin
+		if(reset_n == 1'b0)
+			out <= 8'd160;
+		else if (enable == 1'b1)
+		    begin
+		    if (out == 8'd160)
+			    out <= 8'd0;
+		    else
+			    out <= out + 1'd1;
+		end
+   end
+	
+
+	
+endmodule
+
+
+module frame_counter(clock,reset_n,enable,q);
+        input clock,reset_n,enable;
+        output reg [3:0] q;
+
+        always @(posedge clock)
+        begin
+                if(reset_n == 1'b0)
+                        q <= 4'b0000;
+                else if(enable == 1'b1)
+                begin
+                  if(q == 4'b1111)
+                          q <= 4'b0000;
+                  else
+                          q <= q + 1'b1;
+                end
+    end
+ endmodule
+
+
+ module delay_counter(clock,reset_n,enable,q);
+                input clock;
+                input reset_n;
+                input enable;
+                output reg [19:0] q;
+
+                always @(posedge clock)
+                begin
+                        if(reset_n == 1'b0)
+                                q <= 20'hCEE61;
+                        else if(enable ==1'b1)
+                        begin
+                           if ( q == 20'd0 )
+                                        q <= 20'hCEE61;
+                                else
+                                        q <= q - 1'b1;
+                        end
+                end
+ endmodule
 

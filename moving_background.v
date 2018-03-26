@@ -85,6 +85,8 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
 		output reg enable,load_ground, load_box1,load_box2,load_box3, load_person,plot;
 		
 		reg [3:0] current_state, next_state;
+		
+		reg [7:0] line_counter;
 
 		
 		localparam    S_LOAD_BOX1        = 4'd0,
@@ -105,8 +107,8 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
 						  
 						  S_STARTING           = 4'd12,
                     S_LOAD_GROUND              = 4'd13,
-                    S_LOAD_GROUND_WAIT         = 4'd14,
-                    S_LOAD_READY0               = 4'd15;
+                    S_GROUND_WAIT         = 4'd14,
+                    S_READY0               = 4'd15;
 		
 		always@(*)
         begin: state_table 
@@ -115,7 +117,7 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
                 S_STARTING : next_state = go ? S_LOAD_GROUND : S_STARTING; 
 
                 //Draw Ground
-                S_LOAD_GROUND:next_state = S_GROUND_WAI; 
+                S_LOAD_GROUND:next_state = S_GROUND_WAIT; 
                 S_LOAD_GROUND_WAIT: begin
                                     line_counter = 8'd160; // width of screen
                                     next_state = S_READY0;
@@ -307,7 +309,7 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
 
      wire [7:0] ground_count;
 
-     ground_counter(clock, reset_n, load_ground, ground_count);
+     ground_countergc(clock, reset_n, load_ground, ground_count);
 
      always @ (posedge clock) begin
           if (!reset_n) begin
@@ -339,9 +341,9 @@ endmodule
 module datapath_move(clock, reset_n, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
                      box_3_y, person_x, person_y, erase);
         
-        input clock, reset_n, enable;
+        input clock, reset_n;
         
-        output [6:0] box_1_x,box_1_y,box_2_x,box_2_y,box_3_x,box_3_y, person_x, person_y; 
+        output reg [6:0] box_1_x,box_1_y,box_2_x,box_2_y,box_3_x,box_3_y, person_x, person_y; 
         output erase;
         
         wire enable_f, enable_x;
@@ -354,17 +356,17 @@ module datapath_move(clock, reset_n, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
 
         always@(negedge reset_n) begin
                 // start positions
-                person_x = 7'd10;
-                person_y = GROUND_TOP;
+                person_x <= 7'd10;
+                person_y <= GROUND_TOP;
 
-                box_1_x = 7'd20;
-                box_1_y = GROUND_TOP;
+                box_1_x <= 7'd20;
+                box_1_y <= GROUND_TOP;
        
-                box_2_x = 7'd60;
-                box_2_y = GROUND_TOP;
+                box_2_x <= 7'd60;
+                box_2_y <= GROUND_TOP;
        
-                box_3_x = 7'd120;
-                box_3_y = GROUND_TOP;
+                box_3_x <= 7'd120;
+                box_3_y <= GROUND_TOP;
         end
        
         
