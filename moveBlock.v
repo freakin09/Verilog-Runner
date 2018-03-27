@@ -4,7 +4,8 @@ module moveBlock(slowed_clock, block_x, block_y, ground_top, block_width, screen
     input block_width;
     input screen_width;
     input ground_top;
-    inout reg block_x, block_y;
+    output reg [7:0]  block_x;
+    output reg [6:0]  block_y;
 
     reg x_change, y_change;
 
@@ -48,6 +49,7 @@ module randomPosition(clock, x_displacement, y_displacement);
         if(above_ground == 1'b0)
             y_displacement <= 5'b0;
         else
+            //15 pixels displacement
             y_displacement <= 5'd15;
     end
 endmodule

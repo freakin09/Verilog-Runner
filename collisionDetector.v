@@ -2,7 +2,8 @@ module detectCollision(runner_x, runner_y,runner_width, runner_height,
                        block_x, block_y, block_width, block_height,
                        collision);
     
-    input runner_x, runner_y, block_x, block_y;
+    input [7:0] runner_x, block_x;
+    input [6:0] runner_y, block_y;
     output collision;
 
     always @(*) begin
@@ -12,10 +13,10 @@ module detectCollision(runner_x, runner_y,runner_width, runner_height,
            runner_y >= block_y && 
            runner_y + runner_height <= block_y + block_height)
            
-           collision = 1;
+           assign collision = 1'b1;
 
         else
-            collision = 0;
+            assign collision = 1'b0;
 
     end
 
