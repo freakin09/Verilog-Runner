@@ -6,6 +6,7 @@ module part2
 		// Your inputs and outputs here
         KEY,
         SW,
+        HEX0, HEX1, HEX2, HEX3,
 		// The ports below are for the VGA output.  Do not change.
 		VGA_CLK,   						//	VGA Clock
 		VGA_HS,							//	VGA H_SYNC
@@ -77,8 +78,69 @@ module part2
 
      // Instansiate FSM control
      control c0(CLOCK_50, KEY[0], ~KEY[3], KEY[2], writeEn,  enable, colour_got);
+
+     wire [7:0] score, high_score;
+     count [27:0] count;
+
+     ClockDividor rd25(
+        .clock(CLOCK_50),
+	.enable(enable),
+	.load_v({28'd199999999}),
+	.count(count)
+	);
+
+     wire slowed_clock;
+     assign slowed_clock = (count == 28’d0) ? 1 : 0;
+
+     score_counter sc0(slowed_clock, enable, KEY[0], score, high_score);
+
+     hex_decoder H0(
+        .hex_digit(score[3:0]), 
+        .segments(HEX0)
+        );
+        
+    hex_decoder H1(
+        .hex_digit(score[7:4]), 
+        .segments(HEX1)
+        );
+
+     hex_decoder H2(
+        .hex_digit(high_score[3:0]), 
+        .segments(HEX2)
+        );
+        
+    hex_decoder H3(
+        .hex_digit(high_score[7:4]), 
+        .segments(HEX3)
+        );
+
+     
     
 endmodule
+
+// 28 bit counter that counts down from load value to 0 repeatedly 
+module ClockDividor(clock, enable, load_v,  count);
+
+    
+  input clock, enable;
+  input [27:0] load_v;
+  output reg [27:0] count;
+
+  // syncronous reset
+  always @(posedge clock)
+  begin
+       if(enable == 1'b1)
+          begin 
+	      if( count == 0)  // check if  counted down 
+	          count <= load_v;
+	      else
+	          count <= count - 1'b1;
+
+	  end
+  end
+
+endmodule
+
 
 //counter for drawing 4 x 4 squares
 module counter(clk, reset_n, enable, o);
@@ -308,6 +370,7 @@ module x_counter(clock, reset_n, distance, enable,q);
 	assign clrPerson = (clr == 3'b000) ? 3'b000 : 3'b110;
 	
 	always @(*)begin
+       //if collided, chane colour and stop moving
 	   if(collision1 || collision2 || collision3) begin
 		    colour_out = 3'b100;
 	    end
@@ -565,4 +628,46 @@ module detectCollision(runner_x, runner_y,runner_width, runner_height,
 
 endmodule
 
+module scoreCounter(clock, enable, reset_n, score, high_score);
 
+    input clock, enable, reset_n;
+    output reg [7:0] score, high_score;
+
+    always @(posedge clock) begin
+        if(reset_n)begin
+            score <= 8'd0;
+            if(high_score < score)
+                high_score <= score;        
+        end
+            
+        else if(enable)
+            score <= score + 1'b1;
+    end
+
+endmodule
+
+module hex_decoder(hex_digit, segments);
+    input [3:0] hex_digit;
+    output reg [6:0] segments;
+   
+    always @(*)
+        case (hex_digit)
+            4'h0: segments = 7'b100_0000;
+            4'h1: segments = 7'b111_1001;
+            4'h2: segments = 7'b010_0100;
+            4'h3: segments = 7'b011_0000;
+            4'h4: segments = 7'b001_1001;
+            4'h5: segments = 7'b001_0010;
+            4'h6: segments = 7'b000_0010;
+            4'h7: segments = 7'b111_1000;
+            4'h8: segments = 7'b000_0000;
+            4'h9: segments = 7'b001_1000;
+            4'hA: segments = 7'b000_1000;
+            4'hB: segments = 7'b000_0011;
+            4'hC: segments = 7'b100_0110;
+            4'hD: segments = 7'b010_0001;
+            4'hE: segments = 7'b000_0110;
+            4'hF: segments = 7'b000_1110;   
+            default: segments = 7'h7f;
+        endcase
+endmodule

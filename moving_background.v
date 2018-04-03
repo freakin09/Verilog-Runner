@@ -1,6 +1,6 @@
 // Part 2 skeleton
 
-module background
+module moving_background
 	(
 		CLOCK_50,						//	On Board 50 MHz
 		// Your inputs and outputs here
@@ -85,6 +85,8 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
 		output reg enable,load_ground, load_box1,load_box2,load_box3, load_person,plot;
 		
 		reg [3:0] current_state, next_state;
+		
+		reg [7:0] line_counter;
 
 		
 		localparam    S_LOAD_BOX1        = 4'd0,
@@ -105,8 +107,8 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
 						  
 						  S_STARTING           = 4'd12,
                     S_LOAD_GROUND              = 4'd13,
-                    S_LOAD_GROUND_WAIT         = 4'd14,
-                    S_LOAD_READY0               = 4'd15;
+                    S_GROUND_WAIT         = 4'd14,
+                    S_READY0               = 4'd15;
 		
 		always@(*)
         begin: state_table 
@@ -116,10 +118,11 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
 
                 //Draw Ground
                 S_LOAD_GROUND:next_state = S_GROUND_WAIT; 
-                S_LOAD_GROUND_WAIT: begin
-                                    line_counter = 8'b10100000; // width of screen
+                S_GROUND_WAIT: begin
+                                    line_counter = 8'd160; // width of screen
                                     next_state = S_READY0;
-                S_READY0: next_state = (line_counter == 0) ? S_LOAD_BOX1; S_READY0;
+												end
+                S_READY0: next_state = (line_counter == 8'd0) ? S_LOAD_BOX1: S_READY0;
 
                 //DRAW box1
                 S_LOAD_BOX1: next_state =  S_LOAD_BOX1; 
@@ -227,37 +230,39 @@ module control(go,reset_n, clock, enable, load_ground, load_box1, load_box2, loa
  
 endmodule
 
-module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_person,  x, y, colour_out);
+module datapath(clock, reset_n, jump_key,  enable, load_box1 , load_box2, load_box3,  load_person,  x, y, colour_out);
 	input           	reset_n, clock, enable, load_box1, load_box2, load_box3, load_person;
 	output reg	[7:0] 	x;
 	output reg	[6:0] 	y;
 	output reg 	[2:0]	colour_out;
-        reg             [7:0]   regX;
+    reg         [7:0]   regX;
 	reg     	[6:0]   regY;
-        reg             [2:0]   regC;
+    reg         [2:0]   regC;
 	
-        wire           [1:0] c1, c2;
-	wire           [3:0] c0;
+    wire       [1:0]    c1, c2;
+	wire       [3:0]    c0;
 
-        reg            [6:0] box_1_x,box_1_y,box_2_x,box_2_y,box_3_x,box_3_y, person_x, person_y; 
+    reg        [7:0]    box_1_x, box_2_x, box_3_x, person_x;
+    reg        [6:0]    box_1_y, box_2_y, box_3_y, person_y; 
      
-        localparam GROUND_TOP = 7'd100;
+    localparam GROUND_TOP = 7'd100;
          
 
-        counter cnt0(
-          .clock(clock),
-          .reset_n(reset_n),
-          .enable(enable),
-          .out(c0)
-          );
+    counter cnt0(
+     .clock(clock),
+     .reset_n(reset_n),
+     .enable(enable),
+     .out(c0)
+    );
 
-        wire erase;
+    wire erase;
+    wire game_over;
 
-        datapath_move(clock, reset_n, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
-                      box_3_y, person_x, person_y, erase);
+    datapath_move(clock, reset_n, jump_key, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
+                      box_3_y, person_x, person_y, erase, game_over);
         
 		  
-        assign c1 = c0[1:0];
+    assign c1 = c0[1:0];
 	assign c2 = c0[3:2];
 
  
@@ -267,43 +272,31 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
                 regX <= 8'd0; 
                 regY <= 7'd0;
 		          regC <= 3'd0;
-					 
-					 //hard_code for test purposes
-
-                person_x = 7'd10;
-                person_y = GROUND_TOP;
          
-                box_1_x = 7'd20;
-                box_1_y = GROUND_TOP;
-       
-                box_2_x = 7'd60;
-                box_2_y = GROUND_TOP;
-       
-                box_3_x = 7'd120;
-                box_3_y = GROUND_TOP;
+                
             end
             else begin
                 if (load_box1) begin
-                    regX <= {1'b0, box_1_x};
+                    regX <= box_1_x;
                     regY <= box_1_y;
                     //white colour box
 		    regC <= 3'b111;
                 end
                 else if (load_box2) begin
-                    regX <= {1'b0, box_2_x};
+                    regX <= box_2_x;
                     regY <= box_2_y;
                     //white colour box
 		    regC <= 3'b111;
                 end
                 else if (load_box3) begin
-                    regX <= {1'b0, box_3_x};
+                    regX <= box_3_x;
                     regY <= box_3_y;
                     //white colour box
 		    regC <= 3'b111;
                 end
                 
                 if (load_person) begin
-                    regX <= {1'b0, person_x};
+                    regX <= person_x;
                     regY <= person_y;
                     //red colour person
 		            regC <= 3'b100;
@@ -313,12 +306,15 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
                     //green colour ground
 		            regC <= 3'b010;
                 end
+                //set everything to red to indicate game over
+                if(game_over)
+                    regC <= 3'b100;
             end
         end
 
      wire [7:0] ground_count;
 
-     ground_counter(clock, reset_n, load_ground, ground_count);
+     ground_counter gc(clock, reset_n, load_ground, ground_count);
 
      always @ (posedge clock) begin
           if (!reset_n) begin
@@ -330,6 +326,7 @@ module datapath(clock, reset_n, enable, load_box1 , load_box2, load_box3,  load_
               x <= ground_count;
               y <= regY + c2;
               colour_out <= regC;
+				  end
           else begin
               //counter draws a 4 x 4 square
               x <= regX + c1;
@@ -346,36 +343,100 @@ endmodule
 	
 
 
-module datapath_move(clock, reset_n, box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
-                     box_3_y, person_x, person_y, erase);
+module datapath_move(clock, reset_n, jump,  box_1_x, box_1_y,box_2_x,box_2_y,box_3_x,
+                     box_3_y, person_x, person_y, erase, game_over);
         
-        input clock, reset_n, enable;
+        input clock, reset_n;
+        input jump;
         
-        output [6:0] box_1_x,box_1_y,box_2_x,box_2_y,box_3_x,box_3_y, person_x, person_y; 
+        output reg        [7:0]    box_1_x, box_2_x, box_3_x, person_x;
+        output reg        [6:0]    box_1_y, box_2_y, box_3_y, person_y; 
         output erase;
+        output reg game_over;
         
         wire enable_f, enable_x;
         wire [19:0] do;
         wire [3:0] fo;
+
+        localparam GROUND_TOP = 7'd100;
+        localparam BLOCK_WIDTH = 2'd2;
+        localparam SCREEN_WIDTH = 8'd160;
+        localparam JUMP_HEIGHT = 4'd20;
+
+     
+
+        always@(negedge reset_n) begin
+                // start positions
+                person_x <= 7'd10;
+                person_y <= GROUND_TOP;
+
+                box_1_x <= 7'd20;
+                box_1_y <= GROUND_TOP;
+       
+                box_2_x <= 7'd60;
+                box_2_y <= GROUND_TOP;
+       
+                box_3_x <= 7'd120;
+                box_3_y <= GROUND_TOP;
+
+                game_over <= 1'b0;
+        end
+       
         
-        wire [7:0] a, b;
-        wire [7:0] q1, q2;
-        
-        delay_counter dc(clock,reset_n,enable,do);
-        assign enable_f = (do == 20'b0) ? 1 : 0;
+        delay_counter dc(clock,reset_n, enable,do);
+
         frame_counter fc(clock,reset_n,enable_f,fo); 
-        assign enable_x = (fo == 4'b1111) ? 1 : 0;
+
+        wire slowed_clock; 
+        assign slowed_clock = (do == 20'b0) ? 1 : 0;
+
+        wire collision;
+
+        detectCollision d0(runner_x, runner_y,runner_width, runner_height,
+                       block_x, block_y, block_width, block_height,
+                       collision);
         
-        random_distance rd(clock,reset_n,enable, a, b);
-        x_counter xc1(enable_x, clock, reset_n, a, enable, q1);
-        x_counter xc2(enable_x, clock, reset_n, b, enable, q2);
+        if(collision == 1’b0)
+            detectCollision d1(runner_x, runner_y,runner_width, runner_height,
+                       block_x, block_y, block_width, block_height,
+                       collision);
+
+        if(collision == 1’b0)
+            detectCollision d2(runner_x, runner_y,runner_width, runner_height,
+                       block_x, block_y, block_width, block_height,
+                       collision);
+
+        if(collision == 1’b0) begin
+            moveBlock mb1(slowed_clock, box_1_x, box_1_y, GROUND_TOP, BLOCK_WIDTH, SCREEN_WIDTH);
+            moveBlock mb2(slowed_clock, box_2_x, box_2_y, GROUND_TOP, BLOCK_WIDTH, SCREEN_WIDTH);
+            moveBlock mb3(slowed_clock, box_3_x, box_3_y, GROUND_TOP, BLOCK_WIDTH, SCREEN_WIDTH);
+            end
+        else
+            game_over = 1'b1;
         
-        assign erase = (fo == 4'b1111) ? 1'b1: 1'b0;
+        //move_player logic
+        localparam REDUCE_HEIGHT = 2;
+
+        always @(posedge slowed_clock) begin
+
+           //if jump key is pressed, and player was on ground, then jump
+           //TODO : Jump slowly
+           if(jump && player_y <= ground_top + MAX_JUMP_HEIGHT)
+                 player_y <= player_y + jump_height;
+
+           //lower player slowly if player was in sky
+           else if(player_y > ground_top) 
+               player_y <= player_y - REDUCE_HEIGHT;
+
+       end
+       
+       //keep on erasing after every 4 clock cycles
+       assign erase = (fo == 4'b1111) ? 1'b1: 1'b0;
         
         
 endmodule
 
-counter(clock, reset_n, enable, out);
+module counter(clock, reset_n, enable, out);
 	input 		clock, reset_n, enable;
 	output reg [3:0] out;
 
